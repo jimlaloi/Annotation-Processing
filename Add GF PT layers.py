@@ -1,13 +1,12 @@
 """
-The FrameNet annotation tool has a bug where discontinuous Target LUs, because
-they are annotated as multiple labels, lead to an equal number of duplicate labels
-being generated for each FE that is annotated. This script is to be run post-
-annotation (of the FE layer, pre-annotation of the GF/PT layers), and deletes any
-duplicate labels that are found in any of the FE layers of any annotated LU files.
+This script creates Grammatical Function and Phrase Type layers based on existing
+Frame Element layers and adds them to each sentence of a lexical unit file.
+These GF and PT layers can then have their "name" attributes changed manually to
+the appropriate labels.
 """
-
 import os
 from lxml import etree
+from copy import deepcopy
 
 # define pretty printing function for xml
 def indent(elem, level=0):
@@ -37,17 +36,19 @@ for luID in luIDs:
         with open(myfile, encoding="utf-8") as f:
             tree = etree.parse(f)
             root=tree.getroot()
-            targetlayers = root.findall(f".//{ns}layer[@name='Target']")
-            targetlabels = root.findall(f".//{ns}layer[@name='Target']/{ns}label")
-            if len(targetlayers) != len(targetlabels): # if at least one Target layer has multiple labels
-                FElayers = root.findall(f".//{ns}layer[@name='FE']")
-                for layer in FElayers: # delete duplicate labels in each FE layer
-                    layernames = []
-                    for i in range(len(layer)-1,-1,-1):
-                        if layer[i].get('name') in layernames:
-                            layer[i].getparent().remove(layer[i])
-                        else:
-                            layernames.append(layer[i].get('name'))
+            annoSets = root.findall(f".//{ns}annotationSet")
+            for annoSet in annoSets:
+                FElayer = annoSet[1]
+                GFlayer = annoSet[2]
+                PTlayer = annoSet[3]
+                for child in GFlayer: # remove any pre-existing GF labels to replace them
+                    child.getparent().remove(child)
+                for child in PTlayer: # remove any pre-existing PT labels to replace them
+                    child.getparent().remove(child)
+                for child in FElayer: # copy (non-null) FE labels to GF and PT layers
+                    if 'end' in child.attrib:
+                        GFlayer.append( deepcopy(child))
+                        PTlayer.append( deepcopy(child))
             # pretty print
             indent(root)
             # Overwrite the file
